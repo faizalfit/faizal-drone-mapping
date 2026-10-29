@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mapping Viewer — Faizal Fitrohni</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f4f0e6;color:#171717;font:15px 'Segoe UI',sans-serif}
+header{border-bottom:3px solid #171717;background:#ffe44d;padding:22px 28px;display:flex;justify-content:space-between;gap:20px;align-items:center}
+h1{font-size:clamp(25px,3vw,40px);letter-spacing:-1px;margin:0;font-weight:900}header p{margin:6px 0 0;font-weight:600}
+.controls{padding:18px 26px;display:flex;flex-wrap:wrap;gap:12px;align-items:end;border-bottom:3px solid #171717;background:white}
+label{font-size:12px;font-weight:800;text-transform:uppercase;display:flex;flex-direction:column;gap:5px}
+button,select{font:700 14px 'Segoe UI',sans-serif;border:2px solid #171717;border-radius:0;background:white;padding:9px 12px;min-height:40px}
+button{box-shadow:3px 3px #171717;cursor:pointer}button:active{transform:translate(2px,2px);box-shadow:1px 1px #171717}
+button:focus-visible,select:focus-visible{outline:3px solid #3267e3;outline-offset:3px}button:disabled{opacity:.4;cursor:default}
+#mode{background:#c5b6ff}#rotate{background:#b1f0c0}.check{flex-direction:row;align-items:center;height:40px;font-size:13px}
+main{padding:22px 26px;display:grid;grid-template-columns:1.3fr 1fr;gap:20px;align-items:start}
+.card{border:3px solid #171717;box-shadow:6px 6px #171717;background:white;min-width:0}
+.cardhead{padding:12px 15px;display:flex;justify-content:space-between;gap:10px;border-bottom:3px solid #171717;background:#c5b6ff;font-weight:900}
+.card:nth-child(2) .cardhead{background:#b1f0c0}
+canvas{display:block;width:100%;height:53vh;min-height:320px;touch-action:none;cursor:grab;background:#fff}
+canvas:active{cursor:grabbing}.hint{padding:9px 14px;background:#f1f1f1;border-top:2px solid #171717;font-size:12px}
+.stats{padding:15px;font-size:14px;line-height:1.7}.stats:empty{display:none}.legend{display:flex;align-items:center;gap:12px;padding:10px 15px 14px;border-top:2px solid #171717}
+.gradient{height:14px;flex:1;border:1px solid black;background:linear-gradient(90deg,#440154,#3b528b,#21918c,#5ec962,#fde725)}
+#error{display:none;background:#ffaaaa;border:3px solid black;padding:16px;margin:16px}#group{max-width:300px}
+@media(max-width:900px){main{grid-template-columns:1fr}header{align-items:start;flex-direction:column}
+canvas{height:46vh}.controls,main{padding:16px}}
+</style></head><body>
+<header><div><h1>Mapping Viewer</h1><p>Faizal Fitrohni · 5022241019 · Sistem Robot Otonom</p></div></header>
+<div class="controls">
+<label>Warna peta<select id="mode"><option value="height">Ketinggian Z</option><option value="groups">Kelompok geometris</option></select></label>
+<label>Kepadatan preview<select id="density"><option value="12000">Ringan · 12.000</option><option value="25000" selected>Standar · 25.000</option><option value="50000">Detail · 50.000</option></select></label>
+<label>Pilih kelompok<select id="group"><option value="">Klik titik benda pada peta</option></select></label>
+<label class="check"><input id="trajectory" type="checkbox">Trajectory</label>
+<button id="resetMap">Reset peta</button><button id="clear">Hapus pilihan</button><button id="save">PNG peta</button>
+</div><div id="error"></div>
+<main><section class="card"><div class="cardhead"><span>PETA 3D</span><span id="count"></span></div>
+<canvas id="map" aria-label="Peta point cloud 3D, drag untuk memutar dan klik untuk memilih"></canvas>
+<div class="hint">Drag: putar · Scroll: zoom · Klik singkat: pilih kelompok · Pilihan menu selalu tersedia</div>
+<div class="legend"><span id="zmin"></span><div class="gradient"></div><span id="zmax"></span><b>Z (m)</b></div>
+</section>
+<section class="card"><div class="cardhead"><span id="detailTitle">INSPEKSI KELOMPOK</span><span id="selectedBadge">BELUM DIPILIH</span></div>
+<canvas id="detail" aria-label="Tampilan kelompok terpilih"></canvas>
+<div class="hint">Kelompok ditampilkan terpisah; koordinat tetap mengacu pada dunia.</div>
+<div class="controls" style="padding:10px 14px;border-bottom:2px solid #171717">
+<button id="rotate" disabled>Putar otomatis: mati</button><button id="resetDetail" disabled>Reset objek</button></div>
+<div class="stats" id="stats"></div>
+</section></main>
+<script>
+'use strict';
+const D=__DATA__;
+const $=id=>document.getElementById(id);
+const palette=['#155acb','#e05627','#7f3bad','#078964','#c72968','#9b7400','#167b93','#7f542d','#5c6f22','#5443bb'];
+const lut=D.lut.map(c=>'rgb('+c.join(',')+')');
+let selected=-1,spinning=false,lastSpin=0;
+function heightColor(z){return lut[Math.max(0,Math.min(255,Math.round((z-D.zmin)/Math.max(1e-9,D.zmax-D.zmin)*255)))]}
+function report(e){$('error').style.display='block';$('error').textContent='Viewer: '+(e.message||e)}
+window.addEventListener('error',e=>report(e.error||e.message));
+class Viewer{
+ constructor(id,detail=false){
+  this.canvas=$(id);this.ctx=this.canvas.getContext('2d',{alpha:false});if(!this.ctx)throw Error('Canvas 2D tidak tersedia');
+  this.detail=detail;this.points=[];this.hits=[];this.center=[0,0,0];this.span=10;this.pending=false;this.reset(false);
+  new ResizeObserver(()=>this.invalidate()).observe(this.canvas);
+  this.canvas.addEventListener('pointerdown',e=>{
+   if(e.button!==0)return;if(this.detail)stopRotation();
+   this.drag={id:e.pointerId,x:e.clientX,y:e.clientY,startX:e.clientX,startY:e.clientY,moved:false};
+   this.canvas.setPointerCapture(e.pointerId);
+  });
+  this.canvas.addEventListener('pointermove',e=>{
+   const d=this.drag;if(!d||d.id!==e.pointerId)return;
+   const dx=e.clientX-d.x,dy=e.clientY-d.y;
+   if(Math.hypot(e.clientX-d.startX,e.clientY-d.startY)>5)d.moved=true;
+   if(d.moved){this.yaw+=dx*.008;this.pitch=Math.max(-1.45,Math.min(1.45,this.pitch+dy*.008));this.invalidate()}
+   d.x=e.clientX;d.y=e.clientY;
+  });
+  this.canvas.addEventListener('pointerup',e=>{
+   const d=this.drag;if(!d||d.id!==e.pointerId)return;this.drag=null;
+   if(this.canvas.hasPointerCapture(e.pointerId))this.canvas.releasePointerCapture(e.pointerId);
+   if(!d.moved&&!this.detail){const r=this.canvas.getBoundingClientRect();this.pick(e.clientX-r.left,e.clientY-r.top)}
+  });
+  this.canvas.addEventListener('pointercancel',()=>{this.drag=null});
+  this.canvas.addEventListener('wheel',e=>{e.preventDefault();this.zoom=Math.max(.25,Math.min(6,this.zoom*Math.exp(-e.deltaY*.001)));this.invalidate()},{passive:false});
+ }
+ reset(redraw=true){this.yaw=-.75;this.pitch=.65;this.zoom=.85;if(redraw)this.invalidate()}
+ setPoints(points,fit=true){this.points=points;if(fit&&points.length){
+  const lo=[Infinity,Infinity,Infinity],hi=[-Infinity,-Infinity,-Infinity];
+  for(const p of points)for(let j=0;j<3;j++){lo[j]=Math.min(lo[j],p[j]);hi[j]=Math.max(hi[j],p[j])}
+  this.center=lo.map((v,j)=>(v+hi[j])/2);this.span=Math.max(...hi.map((v,j)=>v-lo[j]),.1);
+ }this.invalidate()}
+ invalidate(){if(this.pending)return;this.pending=true;requestAnimationFrame(()=>{this.pending=false;try{this.draw()}catch(e){report(e)}})}
+ project(p){
+  const x=p[0]-this.center[0],y=p[1]-this.center[1],z=p[2]-this.center[2];
+  const u=x*this.cosY-y*this.sinY,v=x*this.sinY+y*this.cosY;
+  return [this.w/2+u*this.scale,this.h/2+(v*this.sinP-z*this.cosP)*this.scale,v*this.cosP+z*this.sinP];
+ }
+ draw(){
+  const rect=this.canvas.getBoundingClientRect();this.w=rect.width;this.h=rect.height;
+  const ratio=Math.min(window.devicePixelRatio||1,1.5);
+  const width=Math.round(this.w*ratio),height=Math.round(this.h*ratio);
+  if(this.canvas.width!==width||this.canvas.height!==height){this.canvas.width=width;this.canvas.height=height}
+  const c=this.ctx;c.setTransform(ratio,0,0,ratio,0,0);c.fillStyle='#ffffff';c.fillRect(0,0,this.w,this.h);
+  this.cosY=Math.cos(this.yaw);this.sinY=Math.sin(this.yaw);this.cosP=Math.cos(this.pitch);this.sinP=Math.sin(this.pitch);
+  this.scale=Math.min(this.w,this.h)*this.zoom/this.span;
+  this.hits=[];
+  if(!this.points.length){c.fillStyle='#555';c.font='15px sans-serif';c.textAlign='center';c.fillText('Pilih kelompok untuk membuka inspeksi 3D',this.w/2,this.h/2);c.textAlign='left';return}
+  if(!this.detail)this.drawGrid();
+  const projected=this.points.map(p=>({p,q:this.project(p)}));projected.sort((a,b)=>a.q[2]-b.q[2]);
+  const groupMode=$('mode').value==='groups';
+  for(const {p,q} of projected){
+   if(q[0]<-4||q[1]<-4||q[0]>this.w+4||q[1]>this.h+4)continue;
+   const id=this.detail?selected:p[3],active=selected<0||id===selected;
+   let color=groupMode?(id>=0?palette[id%palette.length]:'#c2c4c6'):heightColor(p[2]);
+   if(!this.detail&&selected>=0&&!active)color='#d9dcdf';
+   c.fillStyle=color;
+   const size=this.detail?2.6:(selected>=0&&active?3.3:2);
+   c.fillRect(q[0]-size/2,q[1]-size/2,size,size);
+   if(!this.detail&&id>=0)this.hits.push([q[0],q[1],id,q[2]]);
+  }
+  if(!this.detail&&$('trajectory').checked&&D.track.length){c.strokeStyle='#e22929';c.lineWidth=2;c.beginPath();D.track.forEach((p,i)=>{const q=this.project(p);i?c.lineTo(q[0],q[1]):c.moveTo(q[0],q[1])});c.stroke()}
+  this.drawAxes();c.fillStyle='#333';c.font='11px monospace';c.fillText(this.points.length.toLocaleString('id-ID')+' titik preview · proyeksi ortografis',12,this.h-12);
+ }
+ drawGrid(){const c=this.ctx;c.strokeStyle='#e6e6e6';c.lineWidth=1;
+  for(let i=-5;i<=5;i++){for(const pair of [[[-5,i,0],[5,i,0]],[[i,-5,0],[i,5,0]]]){const a=this.project(pair[0]),b=this.project(pair[1]);c.beginPath();c.moveTo(a[0],a[1]);c.lineTo(b[0],b[1]);c.stroke()}}
+ }
+ drawAxes(){const c=this.ctx,o=[this.center[0]-this.span*.4,this.center[1]-this.span*.4,this.detail?this.center[2]-this.span*.4:0],a=this.project(o);
+  ['X','Y','Z'].forEach((label,j)=>{const p=o.slice();p[j]+=this.span*.2;const b=this.project(p);c.strokeStyle=['#c32c2c','#18753c','#2857d5'][j];c.lineWidth=2;c.beginPath();c.moveTo(a[0],a[1]);c.lineTo(b[0],b[1]);c.stroke();c.fillStyle=c.strokeStyle;c.font='bold 12px monospace';c.fillText(label,b[0]+4,b[1]-4)});
+ }
+ pick(x,y){let best=null,dist=100;for(const h of this.hits){const d=(h[0]-x)**2+(h[1]-y)**2;if(d<=dist){best=h;dist=d}}
+  if(best)choose(best[2]);
+ }
+}
+const map=new Viewer('map'),detail=new Viewer('detail',true);
+function stopRotation(){spinning=false;$('rotate').textContent='Putar otomatis: mati'}
+function choose(id){
+ const g=D.groups.find(g=>g.id===Number(id));if(!g)return;
+ stopRotation();selected=g.id;$('group').value=String(g.id);detail.reset(false);detail.setPoints(g.detail);
+ $('selectedBadge').textContent='ID '+(g.id+1);
+ $('detailTitle').textContent='KELOMPOK '+(g.id+1);
+ $('stats').innerHTML='<b>'+g.count.toLocaleString('id-ID')+' titik penuh</b> · '+g.detail.length.toLocaleString('id-ID')+' titik preview<br>Rentang X × Y × Z: '+g.extent.map(v=>v.toFixed(3)).join(' × ')+' m<br>Z minimum–maksimum: '+g.lower[2].toFixed(3)+'–'+g.upper[2].toFixed(3)+' m'+(g.large?'<br><b>Kelompok luas: dapat berisi beberapa struktur yang bersentuhan.</b>':'')+'<br><small>Rentang Z bukan otomatis tinggi benda sebenarnya.</small>';
+ $('rotate').disabled=false;$('resetDetail').disabled=false;map.invalidate();
+}
+function updateDensity(){const n=Math.min(Number($('density').value),D.points.length);
+ map.setPoints(D.points.slice(0,n),false);$('count').textContent=n.toLocaleString('id-ID')+' TITIK';
+}
+for(const g of D.groups){const option=document.createElement('option');option.value=g.id;option.textContent='Kelompok '+(g.id+1)+' / '+g.count.toLocaleString('id-ID')+' titik';$('group').appendChild(option)}
+map.setPoints(D.points);updateDensity();detail.invalidate();
+$('mode').onchange=()=>{map.invalidate();detail.invalidate()};
+$('density').onchange=updateDensity;$('trajectory').onchange=()=>map.invalidate();
+$('group').onchange=e=>{if(e.target.value!=='')choose(e.target.value)};
+$('rotate').onclick=()=>{spinning=!spinning;$('rotate').textContent='Putar otomatis: '+(spinning?'aktif':'mati')};
+$('resetMap').onclick=()=>map.reset();
+$('resetDetail').onclick=()=>{stopRotation();detail.reset()};
+$('clear').onclick=()=>{stopRotation();selected=-1;$('group').value='';detail.setPoints([]);$('selectedBadge').textContent='BELUM DIPILIH';$('detailTitle').textContent='INSPEKSI KELOMPOK';$('stats').textContent='';$('rotate').disabled=true;$('resetDetail').disabled=true;map.invalidate()};
+$('save').onclick=()=>{const link=document.createElement('a');link.download='mapping_3d.png';link.href=$('map').toDataURL('image/png');link.click()};
+$('zmin').textContent=D.zmin.toFixed(2);$('zmax').textContent=D.zmax.toFixed(2);
+function animate(time){if(spinning&&!document.hidden&&time-lastSpin>80){lastSpin=time;detail.yaw+=.025;detail.invalidate()}requestAnimationFrame(animate)}requestAnimationFrame(animate);
+window.mappingDebug={choose,get selected(){return selected},map,detail,groups:D.groups.length};
+</script></body></html>
