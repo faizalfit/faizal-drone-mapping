@@ -7,9 +7,9 @@ UTS Sistem Robot Otonom - Faizal Fitrohni (5022241019), Teknik Elektro ITS.
 - Gunakan CoppeliaSim 4.10 dan Python 3.12.14
 - Letakkan ketiga file Python dalam satu folder.
 - Sertakan **`mapping_viewer_template.html`** di folder yang sama. File ini wajib untuk membuat viewer HTML.
-- Gunakan scene `.ttt` proyek yang sudah memiliki drone, LiDAR, dan script Lua pengirim data LiDAR.
+- Jalankan scene Coppelia  `faizal_fitrohni_5022241019.ttt`
 
-Buka terminal di folder proyek, kemudian jalankan:
+Jalankan satu per satu file python atau buka terminal di folder proyek, kemudian jalankan:
 
 ## Urutan menjalankan
 
