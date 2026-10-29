@@ -1,22 +1,15 @@
 # Drone LiDAR 3D Mapping
 
-Proyek UTS Sistem Robot Otonom — Faizal Fitrohni (5022241019), Teknik Elektro ITS.
-
-Pemetaan 3D dengan drone dan LiDAR di CoppeliaSim, dilanjutkan pengurangan titik menjadi voxel, pewarnaan berdasarkan ketinggian, dan pengelompokan objek tanpa machine learning.
+UTS Sistem Robot Otonom - Faizal Fitrohni (5022241019), Teknik Elektro ITS.
 
 ## Persiapan
 
-- Gunakan CoppeliaSim 4.10 dan Python (proyek ini menggunakan environment Conda `sro_env`).
+- Gunakan CoppeliaSim 4.10 dan Python 3.12.14
 - Letakkan ketiga file Python dalam satu folder.
 - Sertakan **`mapping_viewer_template.html`** di folder yang sama. File ini wajib untuk membuat viewer HTML.
 - Gunakan scene `.ttt` proyek yang sudah memiliki drone, LiDAR, dan script Lua pengirim data LiDAR.
 
 Buka terminal di folder proyek, kemudian jalankan:
-
-```powershell
-conda activate sro_env
-python -m pip install numpy matplotlib coppeliasim-zmqremoteapi-client
-```
 
 ## Urutan menjalankan
 
@@ -58,5 +51,3 @@ Hasil utama: **`hasil_mapping/mapping_3d_interaktif.html`**. File ini juga bisa 
 - Tahap 02 dan 03 tidak memerlukan CoppeliaSim berjalan.
 - Jika data voxel sudah tersedia, cukup jalankan tahap 03 untuk membuat ulang HTML.
 - Jika scene diubah dan ingin memperbarui peta, ulangi ketiga tahap.
-- Jika tahap 01 hanya menghasilkan file `parsial`, misi belum selesai. Ulangi mapping hingga berhasil sebelum melanjutkan alur standar.
-- Pengelompokan objek tidak mengenali nama benda; objek yang saling menempel dapat tergabung dalam satu kelompok.
