@@ -2,6 +2,10 @@
 
 UTS Sistem Robot Otonom - Faizal Fitrohni (5022241019), Teknik Elektro ITS.
 
+github: https://github.com/faizalfit/faizal-drone-mapping
+Video proses mapping: https://youtu.be/LP9T2kGMEIU?si=_66DVsWCc8ckNJEV
+Video hasil mapping: https://youtu.be/frZXkwX_bZA?si=8PU8pDzxdcZ2fjby
+
 ## Persiapan
 
 - Gunakan CoppeliaSim 4.10 dan Python 3.12.14

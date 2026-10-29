@@ -1,9 +1,9 @@
 {
-  "total": 177999,
+  "total": 177996,
   "groups": [
     {
       "id": 0,
-      "count": 12577,
+      "count": 12573,
       "lower": [
         -4.830497741699219,
         -4.843403339385986,
@@ -228,7 +228,7 @@
     "boundary": 4.85,
     "min_points": 60
   },
-  "ground": 79434,
+  "ground": 79435,
   "boundary": 59612,
   "ungrouped": 1
 }
